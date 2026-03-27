@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+@layer base {
+  body {
+    min-height: 100vh;
+    background-color: #f7f3eb;
+    background-image:
+      radial-gradient(circle at top left, rgba(226, 118, 43, 0.16), transparent 30%),
+      radial-gradient(circle at bottom right, rgba(16, 36, 52, 0.12), transparent 28%);
+    color: #102434;
+  }
+
+  a,
+  button,
+  input,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: rgba(226, 118, 43, 0.2);
+  }
+}
