@@ -24,3 +24,13 @@ pnpm-debug.log*
 /Frontend.pen
 /attendance-v*.tar
 /output
+
+# Local SSH keys accidentally generated in the project root.
+/github
+/github.pub
+/eval \"$(ssh-agent -s)\"
+/eval \"$(ssh-agent -s)\".pub
+/id_rsa
+/id_rsa.pub
+/id_ed25519
+/id_ed25519.pub
