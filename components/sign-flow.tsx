@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { NumericKeypad } from "@/components/NumericKeypad";
-import { PinInput } from "@/components/PinInput";
-import { DEVICE_ID_STORAGE_KEY } from "@/lib/constants";
+import { getOrCreateDeviceId } from "@/lib/device-id";
 import { formatChinaDate, formatChinaDateTime } from "@/lib/time";
 import type { SignContextResult, VerifySignResult } from "@/lib/types";
 
@@ -13,16 +11,95 @@ interface SignFlowProps {
   sessionId?: string;
 }
 
+function getSignRedirectTarget(sessionId?: string) {
+  return sessionId ? `/sign?session_id=${sessionId}` : "/sign";
+}
+
+function SignShell({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="mx-auto flex min-h-dvh max-w-[390px] flex-col bg-paper px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] text-ink sm:justify-center">
+      {children}
+    </main>
+  );
+}
+
+function StudentContextCard({
+  studentName,
+  className,
+  courseName,
+  sessionDate,
+  statusLabel = "可签到",
+}: {
+  studentName: string;
+  className: string;
+  courseName: string;
+  sessionDate: string;
+  statusLabel?: string;
+}) {
+  return (
+    <section className="rounded-lg border border-line bg-white p-4 shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-extrabold text-accent">课堂签到</p>
+          <h1 className="mt-2 break-words text-3xl font-black tracking-tight text-ink">
+            {courseName}
+          </h1>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-mint px-3 py-2 text-sm font-extrabold text-accent">
+          <span className="h-2 w-2 rounded-full bg-accent" />
+          {statusLabel}
+        </span>
+      </div>
+
+      <div className="mt-5 rounded-lg bg-paper p-4">
+        <p className="text-xs font-extrabold text-muted">当前学生</p>
+        <p className="mt-3 text-3xl font-black tracking-tight text-ink">{studentName}</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-white p-3">
+            <p className="text-xs font-extrabold text-muted">班级</p>
+            <p className="mt-1 text-base font-black text-ink">{className}</p>
+          </div>
+          <div className="rounded-lg bg-white p-3">
+            <p className="text-xs font-extrabold text-muted">日期</p>
+            <p className="mt-1 text-base font-black text-ink">{formatChinaDate(sessionDate)}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HomeLink() {
+  return (
+    <Link
+      href="/"
+      className="flex w-full items-center justify-center rounded-lg border border-line bg-white px-4 py-4 text-base font-extrabold text-ink transition hover:bg-paper"
+    >
+      返回首页
+    </Link>
+  );
+}
+
 export function SignFlow({ sessionId }: SignFlowProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [code, setCode] = useState("");
+  const [autoAttempted, setAutoAttempted] = useState(false);
   const [context, setContext] = useState<SignContextResult | null>(null);
   const [signResult, setSignResult] = useState<VerifySignResult | null>(null);
 
+  const redirectTarget = getSignRedirectTarget(sessionId);
+  const loginHref = `/bind?redirect=${encodeURIComponent(redirectTarget)}`;
+
   useEffect(() => {
+    setLoading(true);
+    setSubmitting(false);
+    setMessage(null);
+    setAutoAttempted(false);
+    setContext(null);
+    setSignResult(null);
+
     async function load() {
       if (!sessionId) {
         setContext({
@@ -34,16 +111,21 @@ export function SignFlow({ sessionId }: SignFlowProps) {
         return;
       }
 
-      const deviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-
-      if (!deviceId) {
-        router.replace(`/bind?redirect=${encodeURIComponent(`/sign?session_id=${sessionId}`)}`);
-        return;
-      }
-
       try {
-        const response = await fetch(`/api/sign/session?session_id=${encodeURIComponent(sessionId)}`);
+        const deviceId = getOrCreateDeviceId();
+        const response = await fetch(
+          `/api/sign/session?session_id=${encodeURIComponent(sessionId)}&device_id=${encodeURIComponent(deviceId)}`,
+          {
+            cache: "no-store",
+          },
+        );
         const result = (await response.json()) as SignContextResult;
+
+        if (!result.success && result.code === "NOT_AUTHENTICATED") {
+          router.replace(loginHref);
+          return;
+        }
+
         setContext(result);
       } catch {
         setContext({
@@ -57,22 +139,10 @@ export function SignFlow({ sessionId }: SignFlowProps) {
     }
 
     void load();
-  }, [router, sessionId]);
+  }, [loginHref, router, sessionId]);
 
-  async function submitSign(currentCode: string) {
+  const submitSign = useCallback(async () => {
     if (!sessionId || submitting) {
-      return;
-    }
-
-    if (currentCode.length !== 4) {
-      setMessage("请输入 4 位签到码");
-      return;
-    }
-
-    const deviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
-
-    if (!deviceId) {
-      router.replace(`/bind?redirect=${encodeURIComponent(`/sign?session_id=${sessionId}`)}`);
       return;
     }
 
@@ -80,6 +150,7 @@ export function SignFlow({ sessionId }: SignFlowProps) {
     setMessage(null);
 
     try {
+      const deviceId = getOrCreateDeviceId();
       const response = await fetch("/api/sign", {
         method: "POST",
         headers: {
@@ -87,100 +158,99 @@ export function SignFlow({ sessionId }: SignFlowProps) {
         },
         body: JSON.stringify({
           session_id: sessionId,
-          sign_code: currentCode,
+          device_id: deviceId,
         }),
       });
       const result = (await response.json()) as VerifySignResult;
 
       if (result.success) {
         setSignResult(result);
-        setCode("");
+        return;
+      }
+
+      if (result.code === "NOT_AUTHENTICATED") {
+        router.replace(loginHref);
+        return;
+      }
+
+      if (result.code !== "SERVER_ERROR") {
+        setContext(result);
         return;
       }
 
       setMessage(result.message);
-      setCode("");
     } catch {
       setMessage("签到失败，请稍后重试");
-      setCode("");
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [loginHref, router, sessionId, submitting]);
 
   useEffect(() => {
-    if (code.length === 4 && context?.success && context.status === "ready" && !signResult) {
-      void submitSign(code);
+    if (!context?.success || context.status !== "ready" || signResult || autoAttempted) {
+      return;
     }
-  }, [code, context, signResult]);
 
-  function handleDigit(digit: string) {
-    setMessage(null);
-    setCode((current) => (current.length >= 4 ? current : `${current}${digit}`));
-  }
-
-  function handleDelete() {
-    setCode((current) => current.slice(0, -1));
-  }
+    setAutoAttempted(true);
+    void submitSign();
+  }, [autoAttempted, context, signResult, submitSign]);
 
   if (loading) {
     return (
-      <div className="mx-auto flex min-h-dvh max-w-sm items-center justify-center px-4 py-4 sm:px-5 sm:py-10">
-        <div className="w-full rounded-[1.75rem] border border-white/70 bg-white/85 p-6 text-center shadow-card backdrop-blur sm:rounded-[2rem] sm:p-8">
-          <p className="text-base font-medium text-ink">正在加载签到信息...</p>
-        </div>
-      </div>
+      <SignShell>
+        <section className="mt-auto rounded-lg border border-line bg-white p-6 text-center shadow-card sm:mt-0">
+          <p className="text-base font-extrabold text-ink">正在加载签到信息...</p>
+          <p className="mt-2 text-sm font-medium text-muted">请保持当前页面打开</p>
+        </section>
+      </SignShell>
     );
   }
 
   if (!context || !context.success) {
+    const needsLogin = context?.code === "NOT_AUTHENTICATED";
+
     return (
-      <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-4 sm:px-5 sm:py-10">
-        <div className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-card backdrop-blur sm:rounded-[2rem] sm:p-8">
-          <p className="text-sm font-medium text-accent">签到异常</p>
-          <h1 className="mt-2 text-2xl font-bold text-ink sm:text-3xl">无法签到</h1>
-          <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
+      <SignShell>
+        <section className="mt-auto rounded-lg border border-line bg-white p-5 shadow-card sm:mt-0">
+          <p className="text-sm font-extrabold text-accent">签到异常</p>
+          <h1 className="mt-2 text-3xl font-black text-ink">
+            {needsLogin ? "需要先登录" : "无法签到"}
+          </h1>
+          <p className="mt-5 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-600">
             {context?.message ?? "签到信息无效"}
           </p>
-          <div className="mt-6">
-            <Link href="/bind" className="text-sm font-medium text-ink underline underline-offset-4">
-              前往绑定页面
+          <div className="mt-5 grid gap-3">
+            <Link
+              href={needsLogin ? loginHref : "/bind"}
+              className="flex w-full items-center justify-center rounded-lg bg-ink px-4 py-4 text-base font-extrabold text-white transition hover:bg-ink/90"
+            >
+              {needsLogin ? "前往登录" : "查看账号状态"}
             </Link>
+            <HomeLink />
           </div>
-        </div>
-      </div>
+        </section>
+      </SignShell>
     );
   }
 
   if (context.status === "already_signed" && !signResult) {
-    const result = {
-      success: true,
-      status: "already_signed",
-      studentName: context.studentName,
-      signTime: context.signTime,
-      message: "你已完成签到",
-    };
-
     return (
-      <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-4 sm:px-5 sm:py-10">
-        <div className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-card backdrop-blur sm:rounded-[2rem] sm:p-8">
-          <p className="text-sm font-medium text-accent">签到结果</p>
-          <h1 className="mt-2 text-2xl font-bold text-ink sm:text-3xl">你已完成签到</h1>
-          <div className="mt-6 space-y-3 rounded-[1.5rem] bg-paper p-5">
-            <p className="text-sm text-ink/70">学生姓名</p>
-            <p className="text-xl font-semibold text-ink">{result.studentName}</p>
-            <p className="text-sm text-ink/70">签到时间</p>
-            <p className="font-display text-lg font-semibold text-ink">
-              {formatChinaDateTime(result.signTime)}
+      <SignShell>
+        <div className="mt-auto space-y-4 sm:mt-0">
+          <section className="rounded-lg border border-line bg-white p-5 shadow-card">
+            <p className="text-sm font-extrabold text-accent">签到结果</p>
+            <h1 className="mt-2 text-3xl font-black text-ink">你已完成签到</h1>
+            <div className="mt-5 rounded-lg bg-paper p-4">
+              <p className="text-xs font-extrabold text-muted">当前学生</p>
+              <p className="mt-2 text-2xl font-black text-ink">{context.studentName}</p>
+            </div>
+            <p className="mt-4 rounded-lg bg-mint px-4 py-3 text-base font-extrabold text-ink">
+              {formatChinaDateTime(context.signTime)}
             </p>
-          </div>
-          <div className="mt-6">
-            <Link href="/" className="text-sm font-medium text-ink underline underline-offset-4">
-              返回首页
-            </Link>
-          </div>
+          </section>
+          <HomeLink />
         </div>
-      </div>
+      </SignShell>
     );
   }
 
@@ -188,27 +258,29 @@ export function SignFlow({ sessionId }: SignFlowProps) {
     const isAlreadySigned = signResult.status === "already_signed";
 
     return (
-      <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-4 sm:px-5 sm:py-10">
-        <div className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-card backdrop-blur sm:rounded-[2rem] sm:p-8">
-          <p className="text-sm font-medium text-accent">签到结果</p>
-          <h1 className="mt-2 text-2xl font-bold text-ink sm:text-3xl">
-            {isAlreadySigned ? "你已完成签到" : "签到成功"}
-          </h1>
-          <div className="mt-6 space-y-3 rounded-[1.5rem] bg-paper p-5">
-            <p className="text-sm text-ink/70">学生姓名</p>
-            <p className="text-xl font-semibold text-ink">{signResult.studentName}</p>
-            <p className="text-sm text-ink/70">签到时间</p>
-            <p className="font-display text-lg font-semibold text-ink">
+      <SignShell>
+        <div className="space-y-4">
+          {context.status === "ready" ? (
+            <StudentContextCard
+              studentName={signResult.studentName}
+              className={context.className}
+              courseName={context.courseName}
+              sessionDate={context.sessionDate}
+              statusLabel="已签到"
+            />
+          ) : null}
+          <section className="rounded-lg bg-mint p-5 shadow-card">
+            <p className="text-sm font-extrabold text-accent">签到结果</p>
+            <h2 className="mt-3 text-3xl font-black text-ink">
+              {isAlreadySigned ? "你已完成签到" : "签到成功"}
+            </h2>
+            <p className="mt-3 text-base font-extrabold text-muted">
               {formatChinaDateTime(signResult.signTime)}
             </p>
-          </div>
-          <div className="mt-6">
-            <Link href="/" className="text-sm font-medium text-ink underline underline-offset-4">
-              返回首页
-            </Link>
-          </div>
+          </section>
+          <HomeLink />
         </div>
-      </div>
+      </SignShell>
     );
   }
 
@@ -217,38 +289,63 @@ export function SignFlow({ sessionId }: SignFlowProps) {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-5 sm:py-8">
-      <div className="rounded-[1.75rem] border border-white/70 bg-white/85 p-5 shadow-card backdrop-blur sm:rounded-[2rem] sm:p-6">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-accent">课堂签到</p>
-          <h1 className="text-2xl font-bold text-ink sm:text-3xl">输入 4 位签到码</h1>
-          <div className="rounded-2xl bg-paper px-4 py-3 text-sm leading-6 text-ink/75">
-            <p>学生：{context.studentName}</p>
-            <p>班级：{context.className}</p>
-            <p>课程：{context.courseName}</p>
-            <p>日期：{formatChinaDate(context.sessionDate)}</p>
+    <SignShell>
+      <div className="flex min-h-[calc(100dvh-2rem)] flex-col gap-4">
+        <StudentContextCard
+          studentName={context.studentName}
+          className={context.className}
+          courseName={context.courseName}
+          sessionDate={context.sessionDate}
+        />
+
+        <section className="rounded-lg bg-sidebar p-5 text-white shadow-card">
+          <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-2xl">
+            ⌗
           </div>
-        </div>
+          <h2 className="mt-5 text-3xl font-black">{message ? "签到失败" : "已识别签到场次"}</h2>
+          <p className="mt-4 text-sm font-semibold leading-6 text-slate-200">
+            {submitting
+              ? "正在提交签到，请稍候..."
+              : "保持当前浏览器登录，系统会自动提交签到。提交失败时可以手动重试。"}
+          </p>
+          <div className="mt-5 space-y-3 text-sm font-extrabold">
+            <p className="flex items-center gap-3">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 text-xs text-emerald-300">
+                ✓
+              </span>
+              账号已登录
+            </p>
+            <p className="flex items-center gap-3">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-300 text-xs text-emerald-300">
+                ✓
+              </span>
+              场次有效
+            </p>
+          </div>
+        </section>
 
-        <div className="mt-6 space-y-4">
-          <PinInput value={code} />
-          <NumericKeypad
+        <section className="rounded-lg border border-teal-100 bg-mint p-4">
+          <p className="text-base font-black text-ink">签到成功后显示时间</p>
+          <p className="mt-1 text-sm font-bold text-muted">系统提交后会立即更新结果</p>
+        </section>
+
+        <div className="mt-auto grid gap-3">
+          {message ? (
+            <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+              {message}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void submitSign()}
             disabled={submitting}
-            onDigit={handleDigit}
-            onDelete={handleDelete}
-            onSubmit={() => void submitSign(code)}
-          />
-          <p className="text-center text-xs text-ink/60">点击数字输入签到码</p>
-        </div>
-
-        {message ? (
-          <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{message}</div>
-        ) : null}
-
-        <div className="mt-5 text-center text-sm text-ink/65">
-          {submitting ? "正在验证..." : "输满 4 位会自动校验"}
+            className="flex w-full items-center justify-center rounded-lg bg-ink px-4 py-4 text-base font-extrabold text-white transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {submitting ? "签到中..." : message ? "重新签到" : "手动重试"}
+          </button>
+          <HomeLink />
         </div>
       </div>
-    </div>
+    </SignShell>
   );
 }

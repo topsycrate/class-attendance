@@ -4,13 +4,18 @@
   "private": true,
   "packageManager": "npm@10.8.2",
   "scripts": {
+    "prepare-native": "node scripts/ensure-better-sqlite3.mjs",
+    "predev": "npm run prepare-native",
     "dev": "next dev",
+    "pretest": "npm run prepare-native",
     "test": "vitest",
+    "prebuild": "npm run prepare-native",
     "build": "next build",
+    "prestart": "npm run prepare-native",
     "start": "next start"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.56.1",
+    "better-sqlite3": "^11.10.0",
     "next": "^15.5.2",
     "qrcode.react": "^4.2.0",
     "react": "^19.1.1",

@@ -1,10 +1,10 @@
 # 课堂签到系统
 
-单教师课堂签到系统，当前后端已切换为 Supabase。
+单教师课堂签到系统，当前后端使用本地 SQLite。
 
 - 固定课程：`英语听力`
 - 固定班级：`一班`、`二班`
-- 学生先绑定，再扫码输入 4 位签到码
+- 学生先登录账号，再扫码直接签到
 - 学生入口与教师后台登录入口分离
 - 管理后台只信任服务端签发的管理员会话
 
@@ -13,73 +13,66 @@
 - Next.js 15 App Router
 - React 19
 - TailwindCSS 3.4
-- Supabase
+- SQLite + `better-sqlite3`
 - `qrcode.react`
 
-## 启动
+## 本地启动
 
 ```bash
-cd "/Volumes/HIKSEMI/Python/签到系统"
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-建议 Node 版本：
+`.env.local` 最少需要：
 
-- Node.js `18.20+`
+```env
+DATABASE_PATH=./data/attendance.sqlite
+ADMIN_PASSWORD=change-this-password
+```
+
+说明：
+
+- `DATABASE_PATH` 不填时默认也是 `./data/attendance.sqlite`
+- 应用首次启动会自动创建数据库目录、表结构和索引
+- 本地数据库文件默认保存在 `data/attendance.sqlite`
 
 ## Docker 部署
 
-推荐部署方式：
+详细部署步骤见 [deploy.md](deploy.md)。
 
-- 服务器上安装 Docker Engine 和 Docker Compose Plugin
-- 项目使用 `docker compose` 运行一个 Next.js 容器
-- 域名、HTTPS 和公网入口继续交给你现有的 Nginx / Caddy / 宝塔反向代理
-- Supabase 继续使用外部服务，不放进容器
+当前部署方式：
 
-### 1. 准备生产环境变量
+- 单个 Next.js 容器
+- SQLite 文件默认保存在 Docker 命名卷 `attendance-data`
+- 也支持改成服务器宿主机目录挂载，路径由 `DATA_MOUNT` 控制
+- 容器内数据库路径固定为 `/data/attendance.sqlite`
+- 应用仅监听 `127.0.0.1:3000`，便于交给 Nginx / Caddy / 宝塔反向代理
 
-先复制模板：
+启动命令：
 
 ```bash
 cp .env.production.example .env.production
-```
-
-然后填写：
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-publishable-key
-SUPABASE_SECRET_KEY=your-service-role-or-secret-key
-ADMIN_PASSWORD=你的后台密码
-```
-
-如果你更习惯使用 `SUPABASE_SERVICE_ROLE_KEY`，也可以填这个变量，服务端会读取两者之一。
-
-### 2. 构建并启动容器
-
-```bash
 docker compose --env-file .env.production build
 docker compose --env-file .env.production up -d
 docker compose --env-file .env.production logs -f
 ```
 
-默认情况下，应用只监听服务器本机：
+`.env.production` 最少需要：
 
-- `127.0.0.1:3000`
-
-这样公网流量只能通过你的反向代理进入。
-
-### 3. 更新部署
-
-代码更新后重新执行：
-
-```bash
-docker compose --env-file .env.production build
-docker compose --env-file .env.production up -d
+```env
+DATA_MOUNT=attendance-data
+DATABASE_PATH=/data/attendance.sqlite
+ADMIN_PASSWORD=change-this-password
 ```
 
-如果改了环境变量，也要重新构建并重启。
+如果你想把数据库放到服务器其他目录，例如 `/srv/classroom-attendance/data`，改成：
+
+```env
+DATA_MOUNT=/srv/classroom-attendance/data
+DATABASE_PATH=/data/attendance.sqlite
+ADMIN_PASSWORD=change-this-password
+```
 
 停止服务：
 
@@ -87,85 +80,26 @@ docker compose --env-file .env.production up -d
 docker compose --env-file .env.production down
 ```
 
-### 4. 反向代理示例
+删除容器但保留数据卷时，签到数据不会丢失。只有显式删除 `attendance-data` volume 时，数据库才会被清空。
 
-Nginx 示例：
+如果使用宿主机目录挂载，更新或重建容器也不会影响该目录里的数据库文件。
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
+## 数据初始化
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
+项目不再依赖外部数据库服务，也不需要手动执行建表 SQL。
 
-如果你已经有 HTTPS 配置，只需要把上面的转发目标保持为 `http://127.0.0.1:3000`。
+如果当前数据库为空，只需要先导入学生数据：
 
-## 环境变量
-
-复制模板：
-
-```bash
-cp .env.example .env.local
-```
-
-最少需要：
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=your-publishable-key
-SUPABASE_SECRET_KEY=your-service-role-or-secret-key
-ADMIN_PASSWORD=你的后台密码
-```
-
-可选：
-
-```env
-SUPABASE_SERVICE_ROLE_KEY=
-```
-
-说明：
-
-- 服务端访问 Supabase 必须配置 `SUPABASE_SECRET_KEY` 或 `SUPABASE_SERVICE_ROLE_KEY`
-- 不再支持 `ADMIN_DEVICE_UUIDS`、`ADMIN_ENTRY_USERNAME`、`ADMIN_ENTRY_PASSWORD`
-- 后台统一从 `/admin/login` 登录
-
-## 建表
-
-我已经生成了建表 SQL：
-
-- [schema.sql](/Volumes/HIKSEMI/Python/签到系统/supabase/schema.sql)
-
-在 Supabase Dashboard 里打开 `SQL Editor`，粘贴并执行这份 SQL 即可。
-
-这份 SQL 会创建或补齐：
-
-- `students`
-- `device_bindings`
-- `attendance_sessions`
-- `attendance_records`
-
-如果当前数据库为空，只需要先准备 `students` 数据：
-
-- 必填：`student_id`、`name`
-- 可选：`class_name`、`email`
-
-导入方式：
-
-- 登录后台后打开 `/admin/login`，登录成功后进入 `/admin/session`
-- 学生列表导入页位于 `/admin/students`
+- 登录后台后打开 `/admin/login`
+- 登录成功后进入 `/admin/students`
 - 直接粘贴学生名单
 - 支持格式：`学号,姓名,班级,邮箱`
 - 也支持制表符分隔
+
+字段要求：
+
+- 必填：`student_id`、`name`
+- 可选：`class_name`、`email`
 
 ## 路由
 
@@ -173,7 +107,6 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 - `/`
 - `/bind`
-- `/device-id`
 - `/sign`
 
 后台页面：
@@ -187,22 +120,24 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 ## 当前数据逻辑
 
-- 学生绑定：按 `student_id + name` 查询 `students`
-- 学生设备标识优先通过同源 cookie 传给服务端
-- 首次绑定会更新 `students.class_name`
-- 每个学生只允许一个设备绑定
+- 首次设置 PIN：按 `student_id + name` 查询 `students`
+- 学生设备标识优先通过同源 cookie 传给服务端，仅用于签到记录排查
+- 首次设置 PIN 会更新 `students.class_name`
+- 学生账号不绑定设备，换手机或换浏览器后可重新登录
 - 每个学生每场签到只允许一条记录
+- 同一设备 ID 每场签到只允许提交一次，避免一台手机代多人签到
+- 场次过期后会自动从 `active` 切为 `closed`
 - 管理后台实时页每 5 秒刷新
 
 ## 安全说明
 
 - 首页不会再依据设备信息自动进入后台
-- `device_id` 只用于学生绑定和签到，不代表管理员身份
-- 浏览器不应直接写入 Supabase 业务表，业务写入统一走 Next.js API
-- `supabase/schema.sql` 已切换为启用 RLS，并移除 `anon/authenticated` 的直接写权限
+- `device_id` 只用于同场次重复设备拦截和签到记录排查，不代表管理员或学生身份
+- 浏览器不直接写数据库，业务写入统一走 Next.js API
+- 后台统一从 `/admin/login` 登录
 
 ## 说明
 
 - 页面文案已压缩为简短指引
 - 学生页是移动端优先
-- 为兼容当前本地 Node 18，Tailwind 使用 `3.4.x`
+- 本项目使用 SQLite，适合单机、低并发课堂签到场景

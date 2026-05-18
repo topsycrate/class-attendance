@@ -13,7 +13,7 @@ export default function HomePage() {
               课堂签到
             </h1>
             <p className="max-w-2xl text-sm leading-7 text-ink/75 sm:text-base md:text-lg">
-              查看右侧信息。未绑定先绑定，已绑定直接扫码签到。
+              查看右侧信息。未登录先登录，登录后扫码即可签到。
             </p>
           </div>
         </section>

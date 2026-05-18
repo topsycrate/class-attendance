@@ -1,158 +1,173 @@
-import { SessionStatsSearchForm } from "@/components/session-stats-search-form";
-import { StudentStatsSearchForm } from "@/components/student-stats-search-form";
-import {
-  getSessionDateOptions,
-  getSessionStats,
-  getStudentOptions,
-  getStudentStats,
-} from "@/lib/actions";
-import { formatChinaDateTime, formatPercent } from "@/lib/time";
+import Link from "next/link";
+import { DeleteSessionForm } from "@/components/delete-session-form";
+import { getHistoricalSessionsData } from "@/lib/actions";
+import { formatChinaDate, formatChinaDateTime } from "@/lib/time";
 
 interface StatsPageProps {
   searchParams: Promise<{
+    error?: string;
+    message?: string;
     session_date?: string;
-    session_class?: string;
-    student_class?: string;
-    student_id?: string;
   }>;
 }
 
-function Metric({
-  title,
+function SummaryPill({
+  label,
   value,
+  tone,
 }: {
-  title: string;
-  value: string | number;
+  label: string;
+  value: number;
+  tone: "mint" | "amber" | "red";
 }) {
+  const styles =
+    tone === "mint"
+      ? "bg-mint text-ink"
+      : tone === "amber"
+        ? "bg-amber-50 text-amber-700"
+        : "bg-red-50 text-red-600";
+
   return (
-    <div className="rounded-[1.5rem] bg-paper p-5">
-      <p className="text-sm text-ink/65">{title}</p>
-      <p className="mt-3 font-display text-3xl font-bold text-ink">{value}</p>
-    </div>
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${styles}`}>
+      {label} {value}
+    </span>
   );
 }
 
 export default async function StatsPage({ searchParams }: StatsPageProps) {
   const params = await searchParams;
-  const [studentOptions, sessionDateOptions] = await Promise.all([
-    getStudentOptions().catch(() => []),
-    getSessionDateOptions().catch(() => []),
-  ]);
-  const sessionQuery =
-    params.session_date && params.session_class
-      ? await getSessionStats({
-          date: params.session_date,
-          class_name: params.session_class,
-        }).catch(() => null)
-      : null;
-  const studentQuery = params.student_id
-    ? await getStudentStats({
-        student_id: params.student_id,
-        class_name: params.student_class,
-      }).catch(() => null)
-    : null;
+  const history = await getHistoricalSessionsData(params.session_date);
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-[2rem] bg-white p-6 shadow-card">
-          <p className="text-sm font-medium text-accent">按日期与班级查询</p>
-          <h2 className="text-2xl font-bold text-ink">场次统计</h2>
-          <SessionStatsSearchForm
-            options={sessionDateOptions}
-            initialClassName={params.session_class}
-            initialDate={params.session_date}
-            studentClass={params.student_class}
-            studentId={params.student_id}
-          />
+      {params.message ? (
+        <div className="rounded-2xl bg-mint px-4 py-3 text-sm text-ink">{params.message}</div>
+      ) : null}
+      {params.error ? (
+        <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{params.error}</div>
+      ) : null}
 
-          {sessionQuery ? (
-            <div className="mt-6 space-y-5">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Metric title="班级总人数" value={sessionQuery.total} />
-                <Metric title="已签到" value={sessionQuery.signed} />
-                <Metric title="缺勤" value={sessionQuery.absent} />
-              </div>
-              <p className="text-sm text-ink/65">
-                匹配到 {sessionQuery.matchedSessions} 个场次，按当日该班所有场次合并统计。
-              </p>
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="rounded-[1.5rem] bg-paper p-5">
-                  <h3 className="text-lg font-semibold text-ink">已签到名单</h3>
-                  <div className="mt-4 space-y-3">
-                    {sessionQuery.signedStudents.length === 0 ? (
-                      <p className="text-sm text-ink/60">暂无签到记录</p>
-                    ) : (
-                      sessionQuery.signedStudents.map((student) => (
-                        <div key={student.id} className="rounded-2xl bg-white px-4 py-3">
-                          <p className="font-medium text-ink">{student.name}</p>
-                          <p className="text-sm text-ink/65">学号：{student.student_id}</p>
-                          <p className="text-sm text-ink/65">
-                            签到时间：{formatChinaDateTime(student.sign_time)}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-                <div className="rounded-[1.5rem] bg-paper p-5">
-                  <h3 className="text-lg font-semibold text-ink">缺勤名单</h3>
-                  <div className="mt-4 space-y-3">
-                    {sessionQuery.absentStudents.length === 0 ? (
-                      <p className="text-sm text-ink/60">暂无缺勤学生</p>
-                    ) : (
-                      sessionQuery.absentStudents.map((student) => (
-                        <div key={student.id} className="rounded-2xl bg-white px-4 py-3">
-                          <p className="font-medium text-ink">{student.name}</p>
-                          <p className="text-sm text-ink/65">学号：{student.student_id}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : params.session_date && params.session_class ? (
-            <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
-              场次统计查询失败，请检查日期和班级后重试
-            </div>
-          ) : null}
+      <section className="rounded-[2rem] bg-white p-6 shadow-card">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-medium text-accent">历史签到</p>
+            <h2 className="text-2xl font-bold text-ink">全部已结束场次</h2>
+            <p className="mt-2 text-sm text-ink/65">
+              默认显示全部历史签到，可按日期筛选。日期列表只展示有签到记录的日期。
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={
+                history.selected_date
+                  ? `/api/admin/exports/attendance?session_date=${encodeURIComponent(history.selected_date)}`
+                  : "/api/admin/exports/attendance"
+              }
+              className="inline-flex items-center justify-center rounded-2xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition hover:bg-white"
+            >
+              导出当前查询
+            </a>
+            <a
+              href="/api/admin/exports/attendance/all"
+              className="inline-flex items-center justify-center rounded-2xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition hover:bg-white"
+            >
+              导出全部签到信息
+            </a>
+          </div>
         </div>
 
-        <div className="rounded-[2rem] bg-white p-6 shadow-card">
-          <p className="text-sm font-medium text-accent">先选班级，再选学生</p>
-          <h2 className="text-2xl font-bold text-ink">学生统计</h2>
-          <StudentStatsSearchForm
-            students={studentOptions}
-            initialClassName={params.student_class ?? studentQuery?.class_name}
-            initialStudentId={params.student_id}
-            sessionDate={params.session_date}
-            sessionClass={params.session_class}
-          />
+        <form method="get" className="mt-6 flex flex-col gap-4 md:flex-row md:items-end">
+          <label className="block flex-1 space-y-2">
+            <span className="text-sm font-medium text-ink">按日期筛选</span>
+            <select
+              name="session_date"
+              defaultValue={history.selected_date}
+              className="w-full rounded-2xl border border-line bg-paper px-4 py-3 text-base outline-none transition focus:border-accent"
+            >
+              <option value="">全部日期</option>
+              {history.date_options.map((date) => (
+                <option key={date} value={date}>
+                  {date}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          {params.student_id && !studentQuery ? (
-            <div className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">
-              未找到该学生，或查询时发生错误
-            </div>
-          ) : null}
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:bg-ink/90"
+            >
+              应用筛选
+            </button>
+            {history.selected_date ? (
+              <Link
+                href="/admin/stats"
+                className="inline-flex items-center justify-center rounded-2xl border border-line bg-paper px-4 py-3 text-sm font-medium text-ink transition hover:bg-white"
+              >
+                清除筛选
+              </Link>
+            ) : null}
+          </div>
+        </form>
+      </section>
 
-          {studentQuery ? (
-            <div className="mt-6 space-y-5">
-              <div className="rounded-[1.5rem] bg-paper p-5">
-                <p className="text-sm text-ink/65">学生信息</p>
-                <p className="mt-2 text-xl font-semibold text-ink">
-                  {studentQuery.name} · {studentQuery.student_id}
-                </p>
-                <p className="mt-1 text-sm text-ink/65">班级：{studentQuery.class_name}</p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Metric title="总场次" value={studentQuery.total_sessions} />
-                <Metric title="出勤" value={studentQuery.present_count} />
-                <Metric title="缺勤" value={studentQuery.absent_count} />
-                <Metric title="出勤率" value={formatPercent(studentQuery.attendance_rate)} />
-              </div>
+      <section className="rounded-[2rem] bg-white p-6 shadow-card">
+        <div>
+          <p className="text-sm font-medium text-accent">场次列表</p>
+          <h3 className="text-2xl font-bold text-ink">
+            {history.selected_date ? `${formatChinaDate(history.selected_date)} 的历史签到` : "全部历史签到"}
+          </h3>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          {history.sessions.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-line bg-paper px-4 py-10 text-center text-sm text-ink/60">
+              当前筛选下暂无历史签到记录
             </div>
-          ) : null}
+          ) : (
+            history.sessions.map((session) => (
+              <div
+                key={session.id}
+                className="rounded-[1.5rem] border border-line bg-paper p-5"
+              >
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-lg font-semibold text-ink">
+                        {session.class_name} · {session.course_name}
+                      </p>
+                      <p className="mt-1 text-sm text-ink/65">
+                        日期：{formatChinaDate(session.session_date)} ｜ 创建时间：
+                        {formatChinaDateTime(session.created_at)} ｜ 时长：{session.duration_minutes} 分钟
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <SummaryPill label="已签到" value={session.signed_count} tone="mint" />
+                      <SummaryPill label="请假" value={session.leave_count} tone="amber" />
+                      <SummaryPill label="缺勤" value={session.absent_count} tone="red" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      href={`/admin/session/${session.id}`}
+                      className="inline-flex items-center justify-center rounded-2xl border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:bg-paper"
+                    >
+                      查看详情
+                    </Link>
+                    <DeleteSessionForm
+                      sessionId={session.id}
+                      redirectPath="/admin/stats"
+                      sessionDateFilter={history.selected_date || undefined}
+                      buttonLabel="删除记录"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </section>
     </div>

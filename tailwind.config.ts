@@ -9,11 +9,17 @@ const config = {
   theme: {
     extend: {
       colors: {
-        paper: "#f7f3eb",
-        ink: "#102434",
-        accent: "#e2762b",
-        mint: "#d9ede4",
-        line: "#d8d1c5",
+        paper: "#f6f5f1",
+        ink: "#18212f",
+        accent: "#0f766e",
+        mint: "#dcf7f1",
+        line: "#d9dee8",
+        sidebar: "#121a27",
+        "sidebar-soft": "#1e293b",
+        muted: "#687386",
+        rose: "#be123c",
+        amber: "#b7791f",
+        "amber-soft": "#fff3d6",
       },
       fontFamily: {
         sans: ['"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', '"Noto Sans SC"', "sans-serif"],

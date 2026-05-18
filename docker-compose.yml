@@ -3,22 +3,22 @@ name: classroom-attendance
 services:
   attendance-web:
     image: classroom-attendance:latest
+    container_name: attendance
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
     environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DATABASE_PATH: ${DATABASE_PATH:-/data/attendance.sqlite}
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
       PORT: 3000
-      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY}
-      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     ports:
       - "127.0.0.1:3000:3000"
+    volumes:
+      - ${DATA_MOUNT:-attendance-data}:/data
     restart: unless-stopped
+
+volumes:
+  attendance-data:

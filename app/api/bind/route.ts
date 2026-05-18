@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { bindStudentDevice } from "@/lib/actions";
 import { DEVICE_ID_COOKIE_NAME } from "@/lib/constants";
-import { formatSupabaseError } from "@/lib/supabase";
+import { formatDatabaseError } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         code: "SERVER_ERROR",
-        message: formatSupabaseError(error),
+        message: formatDatabaseError(error),
       },
       { status: 500 },
     );

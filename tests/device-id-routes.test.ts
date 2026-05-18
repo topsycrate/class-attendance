@@ -15,8 +15,8 @@ vi.mock("@/lib/actions", () => ({
   verifyAndSign: actionMocks.verifyAndSign,
 }));
 
-vi.mock("@/lib/supabase", () => ({
-  formatSupabaseError: (error: unknown) => String(error),
+vi.mock("@/lib/db", () => ({
+  formatDatabaseError: (error: unknown) => String(error),
 }));
 
 import { POST as bindPost } from "@/app/api/bind/route";
@@ -33,17 +33,17 @@ describe("device id route trust boundary", () => {
     });
     actionMocks.getSignContext.mockResolvedValue({
       success: false,
-      code: "MISSING_DEVICE",
-      message: "当前设备未绑定，请先完成绑定",
+      code: "NOT_AUTHENTICATED",
+      message: "请先登录学生账号",
     });
     actionMocks.verifyAndSign.mockResolvedValue({
       success: false,
-      code: "MISSING_DEVICE",
-      message: "当前设备未绑定，请先完成绑定",
+      code: "NOT_AUTHENTICATED",
+      message: "请先登录学生账号",
     });
     actionMocks.bindStudentDevice.mockResolvedValue({
       success: true,
-      message: "绑定成功",
+      message: "学生信息确认成功",
       device_id: "cookie-device",
       student: {
         id: "student-1",
@@ -97,7 +97,6 @@ describe("device id route trust boundary", () => {
       body: JSON.stringify({
         session_id: "session-1",
         device_id: "body-device",
-        sign_code: "1234",
       }),
     });
 
@@ -106,7 +105,6 @@ describe("device id route trust boundary", () => {
     expect(actionMocks.verifyAndSign).toHaveBeenCalledWith({
       session_id: "session-1",
       device_id: "cookie-device",
-      sign_code: "1234",
     });
   });
 

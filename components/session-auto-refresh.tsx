@@ -16,5 +16,9 @@ export function SessionAutoRefresh() {
     };
   }, [router]);
 
-  return <p className="text-sm text-ink/60">每 5 秒自动刷新</p>;
+  return (
+    <p className="inline-flex items-center rounded-lg bg-mint px-3 py-2 text-sm font-extrabold text-accent">
+      5 秒自动刷新
+    </p>
+  );
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeviceStatus } from "@/lib/actions";
 import { DEVICE_ID_COOKIE_NAME } from "@/lib/constants";
-import { formatSupabaseError } from "@/lib/supabase";
+import { formatDatabaseError } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message: formatSupabaseError(error),
+        message: formatDatabaseError(error),
       },
       { status: 500 },
     );

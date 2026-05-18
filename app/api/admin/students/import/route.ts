@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importStudentsFromText } from "@/lib/actions";
 import { isAdminRequest } from "@/lib/auth";
-import { formatSupabaseError } from "@/lib/supabase";
+import { formatDatabaseError } from "@/lib/db";
+import { buildRedirectUrl } from "@/lib/request-url";
 
 export async function POST(request: NextRequest) {
   if (!isAdminRequest(request)) {
-    return NextResponse.redirect(new URL("/admin/login", request.url), 303);
+    return NextResponse.redirect(buildRedirectUrl(request, "/admin/login"), 303);
   }
 
   const formData = await request.formData();
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await importStudentsFromText(rawText);
-    const redirectUrl = new URL("/admin/students", request.url);
+    const redirectUrl = buildRedirectUrl(request, "/admin/students");
     redirectUrl.searchParams.set(
       "message",
       `导入完成：新增 ${result.inserted}，更新 ${result.updated}，无效 ${result.invalid}`,
@@ -25,8 +26,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.redirect(redirectUrl, 303);
   } catch (error) {
-    const redirectUrl = new URL("/admin/students", request.url);
-    redirectUrl.searchParams.set("error", formatSupabaseError(error));
+    const redirectUrl = buildRedirectUrl(request, "/admin/students");
+    redirectUrl.searchParams.set("error", formatDatabaseError(error));
     return NextResponse.redirect(redirectUrl, 303);
   }
 }
